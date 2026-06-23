@@ -1,4 +1,4 @@
-# Question 3: Sonic Signatures & Signals to Softwares
+# Sonic Signatures & Signals to Softwares
 
 ## 1. Spectrogram Analysis & Window Length
 The Short-Time Fourier Transform (STFT) splits the signal into overlapping windowed segments to analyze how frequencies change over time.
