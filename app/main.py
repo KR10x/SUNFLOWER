@@ -16,7 +16,7 @@ from src.audio_processor import load_audio, compute_spectrogram, get_constellati
 from src.database import SongDatabase
 from src.matcher import match_query
 
-st.set_page_config(page_title="Zapp tain America", layout="wide")
+st.set_page_config(page_title="Sunflower 🌻", layout="wide")
 
 @st.cache_resource
 def load_db():
@@ -25,7 +25,7 @@ def load_db():
 
 db = load_db()
 
-st.title("Zapp tain America 🎵")
+st.title("Sunflower 🌻")
 st.markdown("Upload a clip to identify the song based on its acoustic fingerprint!")
 
 mode = st.sidebar.radio("Select Mode", ["Single Clip Mode", "Batch Mode"])
