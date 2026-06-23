@@ -50,13 +50,8 @@ To run the code locally, follow these steps:
    python build_db.py
    ```
 
-3. **Run Experiments**
-   Execute the robustness experiments to generate the spectrogram and constellation plots found in this report:
-   ```bash
-   python experiments.py
-   ```
 
-4. **Launch the Web App**
+3. **Launch the Web App**
    Start the interactive Streamlit dashboard to test the identifier on new audio clips:
    ```bash
    streamlit run app/main.py
