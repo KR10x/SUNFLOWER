@@ -34,3 +34,30 @@ The identifier has been wrapped in an interactive Streamlit application.
 - **Batch Mode:** Upload multiple audio files simultaneously to process them in bulk and download the resulting `results.csv` file.
 
 **Source Code:** Available in this repository.
+
+## 6. How to Run the Code
+To run the code locally, follow these steps:
+
+1. **Install Dependencies**
+   First, install the required Python packages:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. **Build the Database**
+   Extract the audio fingerprints from the `SEED` directory and build the reference database (`song_db.pkl`):
+   ```bash
+   python build_db.py
+   ```
+
+3. **Run Experiments**
+   Execute the robustness experiments to generate the spectrogram and constellation plots found in this report:
+   ```bash
+   python experiments.py
+   ```
+
+4. **Launch the Web App**
+   Start the interactive Streamlit dashboard to test the identifier on new audio clips:
+   ```bash
+   streamlit run app/main.py
+   ```
