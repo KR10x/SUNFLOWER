@@ -39,9 +39,9 @@ The identifier has been wrapped in an interactive Streamlit application.
 To run the code locally, follow these steps:
 
 1. **Install Dependencies**
-   First, install the required Python packages:
+   First, install the required Python packages manually:
    ```bash
-   pip install -r requirements.txt
+   pip install numpy librosa scipy matplotlib streamlit
    ```
 
 2. **Build the Database**
