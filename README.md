@@ -1,6 +1,11 @@
 # Sonic Signatures & Signals to Softwares
 
-## 1. Spectrogram Analysis & Window Length
+## 1. Global DFT Analysis
+The Discrete Fourier Transform (DFT) converts a time-domain audio signal into the frequency domain, revealing the constituent frequencies. However, analyzing the entire song globally discards all temporal information—we know *what* frequencies exist, but not *when* they occurred. This makes it impossible to fingerprint a short snippet against a full song using a global DFT.
+
+![Global DFT Analysis](report_plots/dft_entire_song.png)
+
+## 2. Spectrogram Analysis & Window Length
 The Short-Time Fourier Transform (STFT) splits the signal into overlapping windowed segments to analyze how frequencies change over time.
 
 ![Short Window Spectrogram](report_plots/spectrogram_short_window.png)
