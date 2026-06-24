@@ -5,50 +5,50 @@ import librosa
 from scipy.signal import stft
 from scipy.ndimage import maximum_filter
 
-def load_audio(file_path, target_sample_rate=22050):
-    audio_signal, sample_rate = librosa.load(file_path, sr=target_sample_rate, mono=True)
-    return audio_signal, sample_rate
+def fetch_sound(filepath, sr_target=22050):
+    sig, current_sr = librosa.load(filepath, sr=sr_target, mono=True)
+    return sig, current_sr
 
-def compute_spectrogram(
-    audio_signal, 
-    sample_rate, 
-    window_size=1024, 
-    overlap=512
+def get_spectro(
+    sound_wave, 
+    rate, 
+    win_len=1024, 
+    lap=512
 ):
-    frequencies, times, complex_spectrogram = stft(
-        audio_signal, 
-        fs=sample_rate, 
-        nperseg=window_size, 
-        noverlap=overlap
+    freqs, timings, complex_spec = stft(
+        sound_wave, 
+        fs=rate, 
+        nperseg=win_len, 
+        noverlap=lap
     )
-    magnitude_spectrogram = np.abs(complex_spectrogram)
-    log_magnitude_spectrogram = 10 * np.log10(magnitude_spectrogram + 1e-10)
-    return frequencies, times, log_magnitude_spectrogram
+    mag_spec = np.abs(complex_spec)
+    log_spec = 10 * np.log10(mag_spec + 1e-10)
+    return freqs, timings, log_spec
 
-def get_constellation(
-    log_magnitude_spectrogram, 
-    filter_size=(15, 15), 
-    threshold_percentile=90
+def extract_peaks(
+    log_matrix, 
+    box_size=(15, 15), 
+    cutoff_pct=90
 ):
-    local_maxima_mask = maximum_filter(log_magnitude_spectrogram, size=filter_size) == log_magnitude_spectrogram
-    amplitude_threshold = np.percentile(log_magnitude_spectrogram, threshold_percentile)
-    above_threshold_mask = (log_magnitude_spectrogram > amplitude_threshold)
-    peak_mask = local_maxima_mask & above_threshold_mask
-    freq_bins, time_frames = np.where(peak_mask)
-    return list(zip(time_frames, freq_bins))
+    max_spots = maximum_filter(log_matrix, size=box_size) == log_matrix
+    amp_cutoff = np.percentile(log_matrix, cutoff_pct)
+    valid_spots = (log_matrix > amp_cutoff)
+    final_peaks = max_spots & valid_spots
+    f_bins, t_frames = np.where(final_peaks)
+    return list(zip(t_frames, f_bins))
 
-def generate_hashes(constellation, fan_value=15):
-    sorted_points = sorted(constellation, key=lambda point: point[0])
-    fingerprint_hashes = []
-    for anchor_idx in range(len(sorted_points) - fan_value):
-        anchor_time, anchor_freq = sorted_points[anchor_idx]
-        for target_offset in range(1, fan_value + 1):
-            target_time, target_freq = sorted_points[anchor_idx + target_offset]
-            time_difference = target_time - anchor_time
-            if 0 < time_difference < 200:
-                if anchor_freq == 0:
+def create_fingerprints(peak_points, fan_out=15):
+    ordered_peaks = sorted(peak_points, key=lambda p: p[0])
+    hashes = []
+    for base_idx in range(len(ordered_peaks) - fan_out):
+        base_t, base_f = ordered_peaks[base_idx]
+        for offset_val in range(1, fan_out + 1):
+            target_t, target_f = ordered_peaks[base_idx + offset_val]
+            t_diff = target_t - base_t
+            if 0 < t_diff < 200:
+                if base_f == 0:
                     continue
-                freq_ratio = target_freq / anchor_freq
-                hash_string = f"{freq_ratio:.2f}_{time_difference}"
-                fingerprint_hashes.append((hash_string, anchor_time))
-    return fingerprint_hashes
+                f_ratio = target_f / base_f
+                hash_tag = f"{f_ratio:.2f}_{t_diff}"
+                hashes.append((hash_tag, base_t))
+    return hashes

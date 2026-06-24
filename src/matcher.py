@@ -1,32 +1,32 @@
 from collections import defaultdict
 
-def match_query(query_hashes, database):
-    match_scores = defaultdict(lambda: defaultdict(int))
+def find_match(q_hashes, db_obj):
+    tally = defaultdict(lambda: defaultdict(int))
     
-    for hash_val, query_time in query_hashes:
-        if hash_val in database.hashes:
-            matches = database.hashes[hash_val]
-            for song_name, db_time in matches:
-                offset = db_time - query_time
-                match_scores[song_name][offset] += 1
+    for h_tag, q_t in q_hashes:
+        if h_tag in db_obj.stored_hashes:
+            found = db_obj.stored_hashes[h_tag]
+            for title, db_t in found:
+                t_diff = db_t - q_t
+                tally[title][t_diff] += 1
                 
-    best_song = None
-    highest_match_count = 0
-    optimal_histogram = None
+    top_track = None
+    max_hits = 0
+    best_hist = None
     
-    for song_name, offset_counts in match_scores.items():
-        if not offset_counts:
+    for title, offset_dict in tally.items():
+        if not offset_dict:
             continue
             
-        optimal_offset = max(offset_counts, key=offset_counts.get)
-        match_count = offset_counts[optimal_offset]
+        best_diff = max(offset_dict, key=offset_dict.get)
+        hits = offset_dict[best_diff]
         
-        if match_count > highest_match_count:
-            highest_match_count = match_count
-            best_song = song_name
-            optimal_histogram = offset_counts
+        if hits > max_hits:
+            max_hits = hits
+            top_track = title
+            best_hist = offset_dict
             
-    if highest_match_count < 5:
+    if max_hits < 5:
         return "No confident match found.", None
         
-    return best_song, optimal_histogram
+    return top_track, best_hist

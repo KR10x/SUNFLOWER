@@ -5,118 +5,132 @@ import matplotlib.pyplot as plt
 import librosa
 import librosa.display
 
-# Ensure src can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.audio_processor import load_audio, compute_spectrogram, get_constellation, generate_hashes
-from src.database import SongDatabase
-from src.matcher import match_query
+from src.audio_processor import fetch_sound, get_spectro, extract_peaks, create_fingerprints
+from src.database import TrackDB
+from src.matcher import find_match
 
-# Configuration
-DATASET_DIR = "seed"
-TEST_SONG = "Let It Be.mp3"  # Change this to any song in the dataset
-TEST_FILE = os.path.join(DATASET_DIR, TEST_SONG)
-OUTPUT_DIR = "report_plots"
+DATA_FOLDER = "seed"
+TARGET_TRACK = "Let It Be.mp3"
+FULL_TARGET_PATH = os.path.join(DATA_FOLDER, TARGET_TRACK)
+PLOT_FOLDER = "report_plots"
 
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(PLOT_FOLDER, exist_ok=True)
 
-def plot_spectrogram(S_log, sr, title, filename, t, f):
+def render_spectro(log_mat, rate, header, out_name, timings, freqs):
     plt.figure(figsize=(10, 4))
-    librosa.display.specshow(S_log, sr=sr, x_axis='time', y_axis='linear', cmap='magma')
-    plt.title(title)
+    librosa.display.specshow(log_mat, sr=rate, x_axis='time', y_axis='linear', cmap='magma')
+    plt.title(header)
     plt.colorbar(format="%+2.f dB")
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, filename))
+    plt.savefig(os.path.join(PLOT_FOLDER, out_name))
     plt.close()
 
-def plot_constellation(S_log, sr, constellation, title, filename, t, f):
+def render_peaks(log_mat, rate, peak_list, header, out_name, timings, freqs):
     plt.figure(figsize=(10, 4))
-    librosa.display.specshow(S_log, sr=sr, x_axis='time', y_axis='linear', cmap='magma', alpha=0.5)
+    librosa.display.specshow(log_mat, sr=rate, x_axis='time', y_axis='linear', cmap='magma', alpha=0.5)
     
-    if constellation:
-        times, freqs = zip(*constellation)
-        # map frame indices back to physical units roughly for plotting
-        real_times = [t[idx] for idx in times if idx < len(t)]
-        real_freqs = [f[idx] for idx in freqs if idx < len(f)]
-        plt.scatter(real_times, real_freqs, color='red', s=10, marker='x')
+    if peak_list:
+        t_vals, f_vals = zip(*peak_list)
+        real_t = [timings[idx] for idx in t_vals if idx < len(timings)]
+        real_f = [freqs[idx] for idx in f_vals if idx < len(freqs)]
+        plt.scatter(real_t, real_f, color='red', s=10, marker='x')
         
-    plt.title(title)
+    plt.title(header)
     plt.tight_layout()
-    plt.savefig(os.path.join(OUTPUT_DIR, filename))
+    plt.savefig(os.path.join(PLOT_FOLDER, out_name))
     plt.close()
 
-def experiment_window_length():
+def run_dft_check():
+    print("Running DFT Experiment...")
+    sig, rate = fetch_sound(FULL_TARGET_PATH)
+    sig = sig[:30 * rate]
+    
+    Y_fft = np.fft.fft(sig)
+    f_axis = np.fft.fftfreq(len(Y_fft), 1/rate)
+    
+    mask_pos = f_axis > 0
+    f_axis = f_axis[mask_pos]
+    mag_vals = np.abs(Y_fft[mask_pos])
+    
+    plt.figure(figsize=(10, 4))
+    plt.plot(f_axis, mag_vals, color='blue', linewidth=0.5)
+    plt.title('Magnitude DFT of the Audio Clip')
+    plt.xlabel('Frequency (Hz)')
+    plt.ylabel('Magnitude')
+    plt.xlim(0, 5000)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOT_FOLDER, 'dft_entire_song.png'))
+    plt.close()
+    print("Saved DFT plot.")
+
+def run_win_len_check():
     print("Running Window Length Experiment...")
-    y, sr = load_audio(TEST_FILE)
-    # Take just 10 seconds to make plots clear
-    y = y[:10 * sr]
+    sig, rate = fetch_sound(FULL_TARGET_PATH)
+    sig = sig[:10 * rate]
     
-    # Short Window
-    f_short, t_short, S_short = compute_spectrogram(y, sr, nperseg=256, noverlap=128)
-    plot_spectrogram(S_short, sr, 'Spectrogram (Short Window - 256)', 'spectrogram_short_window.png', t_short, f_short)
+    f_s, t_s, mat_s = get_spectro(sig, rate, win_len=256, lap=128)
+    render_spectro(mat_s, rate, 'Spectrogram (Short Window - 256)', 'spectrogram_short_window.png', t_s, f_s)
     
-    # Long Window
-    f_long, t_long, S_long = compute_spectrogram(y, sr, nperseg=4096, noverlap=2048)
-    plot_spectrogram(S_long, sr, 'Spectrogram (Long Window - 4096)', 'spectrogram_long_window.png', t_long, f_long)
+    f_l, t_l, mat_l = get_spectro(sig, rate, win_len=4096, lap=2048)
+    render_spectro(mat_l, rate, 'Spectrogram (Long Window - 4096)', 'spectrogram_long_window.png', t_l, f_l)
     print("Saved window length plots.")
 
-def experiment_constellation():
+def run_peak_check():
     print("Running Constellation Experiment...")
-    y, sr = load_audio(TEST_FILE)
-    y = y[:10 * sr] # 10s
-    f, t, S_log = compute_spectrogram(y, sr)
-    constellation = get_constellation(S_log)
-    plot_constellation(S_log, sr, constellation, 'Constellation of Peaks', 'constellation.png', t, f)
+    sig, rate = fetch_sound(FULL_TARGET_PATH)
+    sig = sig[:10 * rate]
+    f_arr, t_arr, mat_log = get_spectro(sig, rate)
+    p_list = extract_peaks(mat_log)
+    render_peaks(mat_log, rate, p_list, 'Constellation of Peaks', 'constellation.png', t_arr, f_arr)
     print("Saved constellation plot.")
 
-def experiment_noise_robustness():
+def run_noise_check():
     print("Running Noise Robustness Experiment...")
-    y, sr = load_audio(TEST_FILE)
-    # Take a 5 second snippet
-    y_snippet = y[30*sr : 35*sr]
+    sig, rate = fetch_sound(FULL_TARGET_PATH)
+    clip = sig[30*rate : 35*rate]
     
-    db = SongDatabase("song_db.pkl")
+    main_db = TrackDB("song_db.pkl")
     if not os.path.exists("song_db.pkl"):
-        print("Database not found. Please run build_db.py first to test matching!")
+        print("Database not found.")
         return
         
-    # Original
-    _, _, S_log = compute_spectrogram(y_snippet, sr)
-    hashes = generate_hashes(get_constellation(S_log))
-    match_orig, _ = match_query(hashes, db)
-    print(f"Original 5s snippet matched to: {match_orig}")
+    _, _, mat_orig = get_spectro(clip, rate)
+    h_orig = create_fingerprints(extract_peaks(mat_orig))
+    res_orig, _ = find_match(h_orig, main_db)
+    print(f"Original matched to: {res_orig}")
     
-    # Add noise
-    noise = np.random.randn(len(y_snippet)) * 0.05
-    y_noisy = y_snippet + noise
-    _, _, S_noisy = compute_spectrogram(y_noisy, sr)
-    hashes_noisy = generate_hashes(get_constellation(S_noisy))
-    match_noisy, _ = match_query(hashes_noisy, db)
-    print(f"Noisy 5s snippet matched to: {match_noisy}")
+    static_ns = np.random.randn(len(clip)) * 0.05
+    clip_ns = clip + static_ns
+    _, _, mat_ns = get_spectro(clip_ns, rate)
+    h_ns = create_fingerprints(extract_peaks(mat_ns))
+    res_ns, _ = find_match(h_ns, main_db)
+    print(f"Noisy matched to: {res_ns}")
 
-def experiment_pitch_shift():
+def run_pitch_check():
     print("Running Pitch Shift Experiment...")
-    y, sr = load_audio(TEST_FILE)
-    y_snippet = y[30*sr : 35*sr]
+    sig, rate = fetch_sound(FULL_TARGET_PATH)
+    clip = sig[30*rate : 35*rate]
     
-    db = SongDatabase("song_db.pkl")
+    main_db = TrackDB("song_db.pkl")
     if not os.path.exists("song_db.pkl"):
         return
         
-    # Pitch shift up by 1 semitone
-    y_shifted = librosa.effects.pitch_shift(y_snippet, sr=sr, n_steps=1)
-    _, _, S_shifted = compute_spectrogram(y_shifted, sr)
-    hashes_shifted = generate_hashes(get_constellation(S_shifted))
-    match_shifted, _ = match_query(hashes_shifted, db)
-    print(f"Pitch shifted (+1 step) matched to: {match_shifted}")
+    clip_shifted = librosa.effects.pitch_shift(clip, sr=rate, n_steps=1)
+    _, _, mat_shifted = get_spectro(clip_shifted, rate)
+    h_shifted = create_fingerprints(extract_peaks(mat_shifted))
+    res_shifted, _ = find_match(h_shifted, main_db)
+    print(f"Shifted matched to: {res_shifted}")
 
 if __name__ == "__main__":
-    if not os.path.exists(TEST_FILE):
-        print(f"Test file {TEST_FILE} not found. Please check dataset.")
+    if not os.path.exists(FULL_TARGET_PATH):
+        print("Test file not found.")
         sys.exit(1)
         
-    experiment_window_length()
-    experiment_constellation()
-    experiment_noise_robustness()
-    experiment_pitch_shift()
-    print("All experiments done. Check 'report_plots' directory for images.")
+    run_dft_check()
+    run_win_len_check()
+    run_peak_check()
+    run_noise_check()
+    run_pitch_check()
+    print("Experiments done.")

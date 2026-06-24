@@ -3,113 +3,103 @@ import sys
 import numpy as np
 import librosa
 
-# Ensure src can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from src.audio_processor import load_audio, compute_spectrogram, get_constellation, generate_hashes
-from src.database import SongDatabase
-from src.matcher import match_query
+from src.audio_processor import fetch_sound, get_spectro, extract_peaks, create_fingerprints
+from src.database import TrackDB
+from src.matcher import find_match
 
-def run_extreme_tests():
-    dataset_dir = "seed"
-    files = [f for f in os.listdir(dataset_dir) if f.endswith('.mp3')]
+def fire_extreme_tests():
+    data_folder = "seed"
+    track_list = [t for t in os.listdir(data_folder) if t.endswith('.mp3')]
     
-    # Evaluate all files in dataset
-    test_files = files
-    
-    db = SongDatabase("song_db.pkl")
+    main_db = TrackDB("song_db.pkl")
     if not os.path.exists("song_db.pkl"):
-        print("Database not found. Please run build_db.py first!")
+        print("Database missing.")
         return
 
     print("==================================================")
-    print(f"    EXTREME ROBUSTNESS TESTING ON {len(test_files)} SONGS")
+    print(f"    EXTREME ROBUSTNESS TESTING ON {len(track_list)} SONGS")
     print("==================================================")
     
-    results = {
-        "Original": 0,
-        "Noise": 0,
-        "Pitch (+1)": 0,
-        "Pitch (+3)": 0,
-        "Noise + Pitch (+1)": 0
+    scores = {
+        "Clean": 0,
+        "Static": 0,
+        "Shifted (+1)": 0,
+        "Shifted (+3)": 0,
+        "Static + Shift (+1)": 0
     }
     
-    total_songs = len(test_files)
-    valid_songs = 0
+    total_cnt = len(track_list)
+    good_cnt = 0
 
-    for i, file in enumerate(test_files):
-        song_name = os.path.splitext(file)[0]
-        file_path = os.path.join(dataset_dir, file)
+    for idx, t_name in enumerate(track_list):
+        clean_title = os.path.splitext(t_name)[0]
+        full_p = os.path.join(data_folder, t_name)
         
-        print(f"\n[{i+1}/{total_songs}] Testing: {song_name}")
+        print(f"\n[{idx+1}/{total_cnt}] Testing: {clean_title}")
         
         try:
-            # Extract a 5 second snippet
-            y, sr = load_audio(file_path)
-            start_sample = 30 * sr
-            end_sample = 35 * sr
-            if len(y) < end_sample:
-                start_sample = 0
-                end_sample = 5 * sr
+            sig, rate = fetch_sound(full_p)
+            idx_start = 30 * rate
+            idx_end = 35 * rate
+            if len(sig) < idx_end:
+                idx_start = 0
+                idx_end = 5 * rate
             
-            y_snippet = y[start_sample:end_sample]
+            clip = sig[idx_start:idx_end]
             
-            if len(y_snippet) == 0:
-                print("  -> ERROR: Audio too short or empty.")
+            if len(clip) == 0:
+                print("  -> ERROR: Clip too short.")
                 continue
                 
-            valid_songs += 1
+            good_cnt += 1
 
-            # 1. Original Test
-            _, _, S_log = compute_spectrogram(y_snippet, sr)
-            match_orig, _ = match_query(generate_hashes(get_constellation(S_log)), db)
-            pass_orig = match_orig == song_name
-            results["Original"] += int(pass_orig)
-            print(f"  [Original]         Predicted: {match_orig} -> {'PASS ✅' if pass_orig else 'FAIL ❌'}")
+            _, _, mat_c = get_spectro(clip, rate)
+            res_c, _ = find_match(create_fingerprints(extract_peaks(mat_c)), main_db)
+            is_c = res_c == clean_title
+            scores["Clean"] += int(is_c)
+            print(f"  [Clean]            Predicted: {res_c} -> {'PASS ✅' if is_c else 'FAIL ❌'}")
             
-            # 2. Noise Test
-            noise = np.random.randn(len(y_snippet)) * 0.05
-            y_noisy = y_snippet + noise
-            _, _, S_noisy = compute_spectrogram(y_noisy, sr)
-            match_noisy, _ = match_query(generate_hashes(get_constellation(S_noisy)), db)
-            pass_noise = match_noisy == song_name
-            results["Noise"] += int(pass_noise)
-            print(f"  [Noise]            Predicted: {match_noisy} -> {'PASS ✅' if pass_noise else 'FAIL ❌'}")
+            ns = np.random.randn(len(clip)) * 0.05
+            clip_ns = clip + ns
+            _, _, mat_ns = get_spectro(clip_ns, rate)
+            res_ns, _ = find_match(create_fingerprints(extract_peaks(mat_ns)), main_db)
+            is_ns = res_ns == clean_title
+            scores["Static"] += int(is_ns)
+            print(f"  [Static]           Predicted: {res_ns} -> {'PASS ✅' if is_ns else 'FAIL ❌'}")
             
-            # 3. Pitch Shift (+1)
-            y_shifted_1 = librosa.effects.pitch_shift(y_snippet, sr=sr, n_steps=1)
-            _, _, S_shifted_1 = compute_spectrogram(y_shifted_1, sr)
-            match_shifted_1, _ = match_query(generate_hashes(get_constellation(S_shifted_1)), db)
-            pass_pitch_1 = match_shifted_1 == song_name
-            results["Pitch (+1)"] += int(pass_pitch_1)
-            print(f"  [Pitch (+1)]       Predicted: {match_shifted_1} -> {'PASS ✅' if pass_pitch_1 else 'FAIL ❌'}")
+            clip_s1 = librosa.effects.pitch_shift(clip, sr=rate, n_steps=1)
+            _, _, mat_s1 = get_spectro(clip_s1, rate)
+            res_s1, _ = find_match(create_fingerprints(extract_peaks(mat_s1)), main_db)
+            is_s1 = res_s1 == clean_title
+            scores["Shifted (+1)"] += int(is_s1)
+            print(f"  [Shift (+1)]       Predicted: {res_s1} -> {'PASS ✅' if is_s1 else 'FAIL ❌'}")
 
-            # 4. Pitch Shift (+3)
-            y_shifted_3 = librosa.effects.pitch_shift(y_snippet, sr=sr, n_steps=3)
-            _, _, S_shifted_3 = compute_spectrogram(y_shifted_3, sr)
-            match_shifted_3, _ = match_query(generate_hashes(get_constellation(S_shifted_3)), db)
-            pass_pitch_3 = match_shifted_3 == song_name
-            results["Pitch (+3)"] += int(pass_pitch_3)
-            print(f"  [Pitch (+3)]       Predicted: {match_shifted_3} -> {'PASS ✅' if pass_pitch_3 else 'FAIL ❌'}")
+            clip_s3 = librosa.effects.pitch_shift(clip, sr=rate, n_steps=3)
+            _, _, mat_s3 = get_spectro(clip_s3, rate)
+            res_s3, _ = find_match(create_fingerprints(extract_peaks(mat_s3)), main_db)
+            is_s3 = res_s3 == clean_title
+            scores["Shifted (+3)"] += int(is_s3)
+            print(f"  [Shift (+3)]       Predicted: {res_s3} -> {'PASS ✅' if is_s3 else 'FAIL ❌'}")
             
-            # 5. Noise + Pitch (+1)
-            y_noisy_shifted = librosa.effects.pitch_shift(y_noisy, sr=sr, n_steps=1)
-            _, _, S_noisy_shifted = compute_spectrogram(y_noisy_shifted, sr)
-            match_noisy_shifted, _ = match_query(generate_hashes(get_constellation(S_noisy_shifted)), db)
-            pass_both = match_noisy_shifted == song_name
-            results["Noise + Pitch (+1)"] += int(pass_both)
-            print(f"  [Noise+Pitch (+1)] Predicted: {match_noisy_shifted} -> {'PASS ✅' if pass_both else 'FAIL ❌'}")
+            clip_ns1 = librosa.effects.pitch_shift(clip_ns, sr=rate, n_steps=1)
+            _, _, mat_ns1 = get_spectro(clip_ns1, rate)
+            res_ns1, _ = find_match(create_fingerprints(extract_peaks(mat_ns1)), main_db)
+            is_ns1 = res_ns1 == clean_title
+            scores["Static + Shift (+1)"] += int(is_ns1)
+            print(f"  [Static+Shift (+1)] Predicted: {res_ns1} -> {'PASS ✅' if is_ns1 else 'FAIL ❌'}")
             
-        except Exception as e:
-            print(f"  -> ERROR during processing: {e}")
+        except Exception as err:
+            print(f"  -> ERROR: {err}")
 
     print("\n==================================================")
     print("                FINAL REPORT                      ")
     print("==================================================")
-    for condition, passed in results.items():
-        accuracy = (passed / valid_songs) * 100 if valid_songs > 0 else 0
-        print(f"  {condition.ljust(20)}: {passed}/{valid_songs} ({accuracy:.1f}%)")
+    for test_cond, passed_cnt in scores.items():
+        acc = (passed_cnt / good_cnt) * 100 if good_cnt > 0 else 0
+        print(f"  {test_cond.ljust(20)}: {passed_cnt}/{good_cnt} ({acc:.1f}%)")
     print("==================================================")
 
 if __name__ == "__main__":
-    run_extreme_tests()
+    fire_extreme_tests()
